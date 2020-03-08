@@ -1,68 +1,185 @@
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+# Intro to React Server Side Rendering (SSR)
 
-## Available Scripts
+## Create New App with [`create-react-app`](https://github.com/facebook/create-react-app)
 
-In the project directory, you can run:
+0. In Terminal, choose existing (or create new) folder, and make it current.
 
-### `yarn start`
+1. To create new React app named `react-ssr-intro`, run—
 
-Runs the app in the development mode.<br />
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+   ```
+   $ npx create-react-app react-ssr-intro
+   ```
 
-The page will reload if you make edits.<br />
-You will also see any lint errors in the console.
+1. Check if the app runs without errors—
 
-### `yarn test`
+   ```
+   $ yarn start
+   ```
 
-Launches the test runner in the interactive watch mode.<br />
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Create `Home` Component
 
-### `yarn build`
+```jsx harmony
+// ./src/Home.js
 
-Builds the app for production to the `build` folder.<br />
-It correctly bundles React in production mode and optimizes the build for the best performance.
+import React from "react";
 
-The build is minified and the filenames include the hashes.<br />
-Your app is ready to be deployed!
+export default ({ name }) => <h1>Hello, {name}</h1>;
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Use `Home` component in the `App`—
 
-### `yarn eject`
+```jsx harmony
+// ./src/App.js
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+import React from "react";
+import Home from "./Home";
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+export default () => <Home name="Alligator" />;
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+## `hydrate` instead of `render`
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+Use ReactDOM's `hydrate` method to facilitate server side rendering—
 
-## Learn More
+```jsx harmony
+// ./src/index.js
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+import React from "react";
+import ReactDOM from "react-dom";
+import App from "./App";
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+ReactDOM.hydrate(<App />, document.getElementById("root"));
+``` 
 
-### Code Splitting
+## Set Up A Server
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/code-splitting
+Express is a good candidate for a simple server that will render the app output and send it along.
 
-### Analyzing the Bundle Size
+0. Add the component—
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size
+   ```
+   $ yarn add express
+   ```
 
-### Making a Progressive Web App
+0. Create the `server` folder, on the `src` level, and the `index.js` file inside—
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app
+   ```
+   $ mkdir server && touch server/index.js
+   ```
 
-### Advanced Configuration
+0. Modify this `index.js`—
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/advanced-configuration
+   ```jsx harmony
+   // ./server/index.js
+   
+   import path from "path";
+   import fs from "fs";
+   
+   import React from "react";
+   import express from "express/lib/express";
+   import ReactDOMServer from "react-dom/server";
+   
+   import App from "../src/App";
+   
+   const PORT = process.env.PORT || 3006;
+   const app = express();
+   
+   const appDataFolder =
+     process.env.APPDATA ||
+     (process.platform === "darwin"
+       ? process.env.HOME + "/Library/Preferences"
+       : process.env.HOME + "/.local/share");
+   console.log("AppData folder:", appDataFolder);
+   
+   // app.get("/", express.static("build"));
+   
+   app.get("/*", (req, res) => {
+     const app = ReactDOMServer.renderToString(<App />);
+     const indexFile = path.resolve("build/index.html");
+     fs.readFile(indexFile, "utf8", (err, data) => {
+       if (err) {
+         console.error("Something went wrong:", err);
+         return res.status(500).send("Oops, better luck next time!");
+       }
+   
+       return res
+         .status(200)
+         .send(
+           data.replace('<div id="root"></div>', `<div id="root">${app}</div>`)
+         );
+     });
+   });
+   
+   app.listen(PORT, () => {
+     console.log(`😎 Server is listening on port ${PORT}`);
+   });
+   
+   ```
 
-### Deployment
+## Configure Webpack and Babel
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/deployment
+0. Install components as `devDependencies`—
 
-### `yarn build` fails to minify
+   ```
+   $ yarn add --dev @babel/core @babel/preset-env @babel/preset-react babel-loader nodemon webpack-cli webpack-node-externals concurrently
+   ```
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify
+0. In the project root, create Babel config file, `.babelrc`—
+
+   ```
+   {
+     "presets": ["@babel/preset-env", "@babel/preset-react"]
+   }
+   ```
+
+0. In the project root, create `webpack.server.js` config file—
+
+   ```javascript
+   const path = require("path");
+   const nodeExternals = require("webpack-node-externals");
+   
+   module.exports = {
+     entry: "./server/index.js",
+     target: "node",
+     externals: [nodeExternals()],
+     output: {
+       path: path.resolve("server-build"),
+       filename: "index.js"
+     },
+     module: {
+       rules: [
+         {
+           test: /\.js$/,
+           exclude: /node_modules/,
+           use: "babel-loader"
+         }
+       ]
+     }
+   };
+   ```
+   
+   Webpack transpiles the server (written in ES6) to ES5 executable by NodeJS, by generating `server-build/index.js`.
+
+## Add NPM scripts
+
+Open `package.json`, and update its `scripts` node with all three `dev` entries—
+
+```json
+"scripts": {
+  "start": "react-scripts start",
+  "build": "react-scripts build",
+  "test": "react-scripts test",
+  "eject": "react-scripts eject",
+  "dev:build-server": "NODE_ENV=development webpack --config webpack.server.js --mode=development -w",
+  "dev:start": "nodemon ./server-build/index.js",
+  "dev": "concurrently \"yarn build\" \"yarn dev:build-server\" \"yarn dev:start\""
+}
+```
+
+## Run the App
+
+```
+$ yarn dev
+```
+
+Your app should be available on [`http://localhost:3006`](http://localhost:3006).

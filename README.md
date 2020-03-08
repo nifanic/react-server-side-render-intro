@@ -1,5 +1,7 @@
 # Intro to React Server Side Rendering (SSR)
 
+This is a 2020-updated version of [An Introduction to React Server-Side Rendering](https://alligator.io/react/server-side-rendering/) by @alligatorio.
+
 ## Create New App with [`create-react-app`](https://github.com/facebook/create-react-app)
 
 0. In Terminal, choose existing (or create new) folder, and make it current.
